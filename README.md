@@ -1,28 +1,26 @@
-# Kodi-LegieKondor
+# Legie Kondor Subtitles - Kodi Subtitle Addon
 
-A Kodi subtitle addon (`service.subtitles.legiekondor`) for [Legie Kondor](https://anime4.legiekondor.cz/) — Czech anime subtitles.
+Kodi subtitle service addon for anime4.legiekondor.cz — Czech anime subtitles, no account required.
 
-## What it does
+Compatible with Kodi 19, 20, and 21.
 
-- Matches Kodi's video metadata (show title, season, episode) - or a manual search - against Legie Kondor's small, hand-curated anime catalog
-- Downloads the matching episode's subtitle directly - **no account, login or password of any kind needed**, the whole site is public
-- Whole-season bulk download ("packdwl") is not supported - not needed for personal use
+## Current Version
+service.subtitles.legiekondor - 1.0.0
 
-## Installation
+## Installation Instructions
+Recommended: install through the [Highflight Subtitles Repository](https://github.com/KiritoSenpaiCZ/KiritoSenpaiCZ.github.io), which also handles updates.
 
-1. Download the repo as a zip, or build `service.subtitles.legiekondor-1.0.0.zip` from this repo's contents
-2. In Kodi: **Add-ons → Install from zip file**, select the zip
+Manual install:
+1. Download `service.subtitles.legiekondor-1.0.0.zip` from this repo (or build it from source)
+2. In Kodi: **Add-ons > Install from zip file**, select the zip
+
+## Setup Instructions
+None — the whole site is public, no login needed.
 
 ## How it works
+- Matches Kodi's video metadata (or a manual search) against Legie Kondor's anime catalog
+- Downloads the matching episode's subtitle directly
+- Whole-season bulk downloads aren't supported (not needed for single-episode playback)
 
-- The catalog (anime slug → real title) is read from the site's `/p/vypis/` listing page and cached locally for 24h, since building it takes one request per anime page
-- Each anime's episode list is read from the small thumbnail images on its own page - their filenames embed a `season*100 + episode` code (e.g. `104` = S01E04), which doubles as the subtitle's direct download path (`/subdwl/<slug>.<code>/`)
-- No session/login caching needed at all - there's no login
-
-## Related
-
-- [Kodi-Hiyori](https://github.com/KiritoSenpaiCZ/Kodi-Hiyori) — hiyori.cz
-- [Kodi-Wosir](https://github.com/KiritoSenpaiCZ/Kodi-Wosir) — wosir.cz
-- [Kodi-Edna](https://github.com/KiritoSenpaiCZ/Kodi-Edna) — edna.cz
-- [Kodi-Kamui](https://github.com/KiritoSenpaiCZ/Kodi-Kamui) — kamui-subs.cz
-- [Kodi-NyaSub](https://github.com/KiritoSenpaiCZ/Kodi-NyaSub) — nyasub.cz
+## Issues
+Please open an issue in this repo with a description of the problem and, if possible, a Kodi debug log (Settings > System > Logging > Enable debug logging, then grep `kodi.log` for `[LegieKondor]`).
