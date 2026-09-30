@@ -45,6 +45,7 @@ import html as html_mod
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import traceback
@@ -82,6 +83,17 @@ HEADERS = {
 LANG_NAME = "Czech"
 LANG_FLAG = "cs"
 
+# Anything left behind in TEMP_DIR older than this gets swept on the next
+# run - a search+download round trip finishes in well under a minute, so
+# anything still there an hour later is leftover, not in-use.
+TEMP_MAX_AGE_SECONDS = 3600
+
+# Refuse an implausibly large download or an implausibly large *extracted*
+# zip - subtitle files/packs are small, so either cap being hit means
+# something's wrong (a huge unexpected response, or a zip bomb).
+MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
+MAX_EXTRACTED_BYTES = 200 * 1024 * 1024
+
 
 # ---------------- small helpers ----------------
 
@@ -112,6 +124,35 @@ def load_json(path):
             return json.load(f)
     except Exception:
         return None
+
+
+def cleanup_temp_dir():
+    """Sweep old downloaded zips/extracted folders out of TEMP_DIR - these
+    accumulated forever before. The rows and catalog caches are kept (the
+    catalog in particular has its own 24h TTL logic and would otherwise
+    get wiped every hour, defeating its purpose)."""
+    keep = {os.path.basename(ROWS_FILE), os.path.basename(CATALOG_FILE)}
+    try:
+        now = time.time()
+        for name in os.listdir(TEMP_DIR):
+            if name in keep or not name.startswith('legiekondor_'):
+                continue
+            path = os.path.join(TEMP_DIR, name)
+            try:
+                age = now - os.path.getmtime(path)
+            except OSError:
+                continue
+            if age < TEMP_MAX_AGE_SECONDS:
+                continue
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    os.remove(path)
+            except OSError as e:
+                log("cleanup: couldn't remove {0}: {1}".format(path, e))
+    except Exception as e:
+        log("cleanup_temp_dir failed: {0}".format(e))
 
 
 # ---------------- title/query cleanup (same logic as Hiyori/WoSir/Edna) ----------------
@@ -404,6 +445,12 @@ def handle_download(params):
             row['slug'], row['code'], resp.status_code))
         return
 
+    if len(content) > MAX_DOWNLOAD_BYTES:
+        notify("Download refused - file is larger than expected (see debug log).")
+        log("download refused: {0} bytes exceeds MAX_DOWNLOAD_BYTES {1}".format(
+            len(content), MAX_DOWNLOAD_BYTES))
+        return
+
     safe_name = "{0}_{1}".format(row['slug'], row['code'])
     is_zip = content[:2] == b'PK'
 
@@ -420,6 +467,12 @@ def handle_download(params):
         extract_dir = os.path.join(TEMP_DIR, "legiekondor_{0}_{1}".format(safe_name, int(time.time())))
         try:
             with zipfile.ZipFile(zip_path) as zf:
+                extracted_size = sum(info.file_size for info in zf.infolist())
+                if extracted_size > MAX_EXTRACTED_BYTES:
+                    notify("Download refused - archive is larger than expected when extracted (see debug log).")
+                    log("refusing to extract {0}: extracted size {1} exceeds MAX_EXTRACTED_BYTES {2}".format(
+                        zip_path, extracted_size, MAX_EXTRACTED_BYTES))
+                    return
                 zf.extractall(extract_dir)
         except Exception as e:
             log("zip extract failed: {0}".format(e))
@@ -458,6 +511,7 @@ def handle_download(params):
 
 def run():
     try:
+        cleanup_temp_dir()
         params = get_params()
         action = params.get('action', [''])[0]
         log("action={0} params={1}".format(action, params))
