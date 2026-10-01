@@ -76,6 +76,10 @@ LANG_FLAG = "cs"
 # run - a search+download round trip finishes in well under a minute, so
 # anything still there an hour later is leftover, not in-use.
 TEMP_MAX_AGE_SECONDS = 3600
+# temp-folder entries this addon creates start with TEMP_FILE_PREFIX;
+# KEEP_FILES are never swept
+TEMP_FILE_PREFIX = 'legiekondor_'
+KEEP_FILES = {os.path.basename(ROWS_FILE), os.path.basename(CATALOG_FILE), os.path.basename(OWNERS_FILE)}
 
 # Refuse an implausibly large download or an implausibly large *extracted*
 # zip - subtitle files/packs are small, so either cap being hit means
@@ -115,6 +119,7 @@ def load_json(path):
         return None
 
 
+# >>> shared block "kodi_temp" - edit dev/shared/kodi_temp.py in KiritoSenpaiCZ.github.io, then run dev/sync.py
 def current_video():
     """Path of the video Kodi has loaded - playing OR paused - else None.
     (Player.Playing alone isn't enough: it's false while paused.)"""
@@ -162,17 +167,17 @@ def remember_owner(path):
 
 
 def cleanup_temp_dir():
-    """Sweep old downloads out of TEMP_DIR. Kept: the small caches managed by their own logic, and every
-    subtitle belonging to the video Kodi currently has loaded - playing or
-    paused - however old it is, so a long pause can't delete a subtitle
-    that's still in use."""
-    keep = {os.path.basename(ROWS_FILE), os.path.basename(CATALOG_FILE), os.path.basename(OWNERS_FILE)}
+    """Sweep old downloads out of TEMP_DIR. Kept: KEEP_FILES (small caches
+    managed by their own logic), and every subtitle belonging to the video
+    Kodi currently has loaded - playing or paused - however old it is, so a
+    long pause can't delete a subtitle that's still in use."""
+    keep = KEEP_FILES
     owners = _read_owners()
     video = current_video()
     try:
         now = time.time()
         for name in os.listdir(TEMP_DIR):
-            if name in keep or not name.startswith('legiekondor_'):
+            if name in keep or not name.startswith(TEMP_FILE_PREFIX):
                 continue
             if video and owners.get(name) == video:
                 continue
@@ -196,6 +201,7 @@ def cleanup_temp_dir():
             _write_owners(still_there)
     except Exception as e:
         log("cleanup_temp_dir failed: {0}".format(e))
+# <<< shared block "kodi_temp"
 
 
 # ---------------- title/query cleanup ----------------
