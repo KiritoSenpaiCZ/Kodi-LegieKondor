@@ -1,43 +1,31 @@
 # -*- coding: utf-8 -*-
 """
-Legie Kondor (anime4.legiekondor.cz) Subtitle Downloader - Kodi subtitle
-service addon.
+Legie Kondor (anime4.legiekondor.cz) Subtitles - Kodi subtitle service
+addon.
 
-Site specifics (all confirmed live while building this addon):
+Site notes:
   - No account/login of any kind - every page and every subtitle file is
-    served completely publicly.
-  - Small, hand-curated catalog (23 anime total at build time, no
-    pagination) listed at /p/vypis/ ("Nase preklady"). Anime titles are
-    NOT plain text there (baked into cover images) - each card is a
-    JS-driven <article onclick="window.location.href='/a/<slug>/'">, so
-    the slug list comes from that onclick attribute, and the real title
-    comes from each anime page's own <title> tag.
-  - An anime's episode list isn't a normal HTML list either - each
-    episode is represented purely by a cached thumbnail image at
+    public.
+  - Small, hand-curated catalog (no pagination) listed at /p/vypis/
+    ("Nase preklady"). Anime titles are NOT plain text there (baked into
+    cover images) - each card is a JS-driven
+    <article onclick="window.location.href='/a/<slug>/'">, so the slug
+    list comes from that onclick attribute, and the real title comes
+    from each anime page's own <title> tag.
+  - An anime's episode list is only a set of cached thumbnail images at
     .../epcache/<slug>/<code>.webp, where <code> = season*100 + episode
-    (e.g. "104" = S01E04, "601" = S06E01). Confirmed across multiple
-    shows/seasons (hanashura: 101-106 = S01E01-06; kuroshitsuji:
-    501-511 = S05E01-11, then 601-602 = S06E01-02) - this is enough
-    evidence to treat the formula as reliable, not a one-show fluke.
-  - The subtitle file for a given episode downloads directly and
-    publicly from /subdwl/<slug>.<code>/ - confirmed live to return
-    HTTP 200, "content-type: application/octet-stream", and a body
-    that is a plain UTF-8 .ass file (starts with the "[Script Info]"
-    signature after a BOM). No cookies, tokens or referer needed.
-  - There's also a whole-series pack at /packdwl/<slug>/ - deliberately
-    not used here (per-episode download is simpler and matches how the
-    other addons in this family work).
+    (e.g. "104" = S01E04, "601" = S06E01).
+  - The subtitle file for an episode downloads directly and publicly
+    from /subdwl/<slug>.<code>/ - normally a plain UTF-8 .ass file
+    (starting with "[Script Info]" after a BOM). No cookies, tokens or
+    referer needed.
+  - The whole-series pack at /packdwl/<slug>/ is deliberately not used.
+  - The catalog (slug -> real title) is cached to disk for 24h, since it
+    takes one request per anime page to build and rarely changes. The
+    per-anime episode list (one request) is always fetched fresh.
 
-Design choices carried over on purpose from Hiyori/WoSir/Edna:
-  - The small anime catalog (slug -> real title) is cached to disk for
-    24h, since it takes ~24 site requests to build (one per anime page,
-    to read its <title> tag) and changes rarely; re-fetched automatically
-    once the cache goes stale. The per-anime episode list (cheap: one
-    request, no login) is always fetched fresh.
-  - Content-based parsing rather than fixed structure assumptions.
-  - Heavy debug logging via log() - enable Kodi's debug log
-    (Settings -> System -> Logging), reproduce, then grep kodi.log for
-    "[LegieKondor]" and paste the lines back for troubleshooting.
+Debugging: enable Kodi's debug log (Settings -> System -> Logging),
+reproduce, then look for "[LegieKondor]" lines in kodi.log.
 """
 
 import difflib
@@ -158,8 +146,7 @@ def _write_owners(owners):
 def remember_owner(path):
     """Record which video a delivered subtitle belongs to, so
     cleanup_temp_dir() never deletes it while that video is still loaded
-    (e.g. paused for more than an hour) - suggested by Hanabi's API
-    maintainer."""
+    (e.g. paused for more than an hour)."""
     video = current_video()
     if not video:
         return
@@ -175,8 +162,7 @@ def remember_owner(path):
 
 
 def cleanup_temp_dir():
-    """Sweep old downloads out of TEMP_DIR (they used to accumulate
-    forever). Kept: the small caches managed by their own logic, and every
+    """Sweep old downloads out of TEMP_DIR. Kept: the small caches managed by their own logic, and every
     subtitle belonging to the video Kodi currently has loaded - playing or
     paused - however old it is, so a long pause can't delete a subtitle
     that's still in use."""
@@ -212,7 +198,7 @@ def cleanup_temp_dir():
         log("cleanup_temp_dir failed: {0}".format(e))
 
 
-# ---------------- title/query cleanup (same logic as Hiyori/WoSir/Edna) ----------------
+# ---------------- title/query cleanup ----------------
 
 def clean_release_title(name):
     if not name:
