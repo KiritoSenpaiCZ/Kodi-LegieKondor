@@ -88,6 +88,22 @@ MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 200 * 1024 * 1024
 
 
+# >>> shared block "kodi_lang" - edit dev/shared/kodi_lang.py in KiritoSenpaiCZ.github.io, then run dev/sync.py
+# The addon's messages are in Czech when Kodi's language is Czech or Slovak,
+# English otherwise. L("english", "czech", *args) picks one and fills in
+# {0}-style placeholders like str.format.
+try:
+    _UI_LANG = xbmc.getLanguage(xbmc.ISO_639_1)
+except Exception:
+    _UI_LANG = ''
+
+
+def L(en, cs, *args):
+    text = cs if _UI_LANG in ('cs', 'sk') else en
+    return text.format(*args) if args else text
+# <<< shared block "kodi_lang"
+
+
 # ---------------- small helpers ----------------
 
 def log(msg):
@@ -470,12 +486,12 @@ def handle_search(params, is_manual):
 def handle_download(params):
     rid = params.get('rid', [None])[0]
     if rid is None:
-        notify("Nothing to download.")
+        notify(L('Nothing to download.', 'Není co stáhnout.'))
         return
     rows = load_json(ROWS_FILE) or {}
     row = rows.get(rid)
     if not row:
-        notify("Subtitle info expired - please search again.")
+        notify(L('Subtitle info expired - please search again.', 'Údaje o titulcích vypršely - vyhledejte prosím znovu.'))
         return
 
     download_url = "{0}/subdwl/{1}.{2}/".format(BASE_URL, row['slug'], row['code'])
@@ -485,17 +501,17 @@ def handle_download(params):
         content_disposition = resp.headers.get('Content-Disposition', '')
     except Exception as e:
         log("download failed: {0}".format(e))
-        notify("Download failed (see debug log).")
+        notify(L('Download failed (see debug log).', 'Stažení selhalo (podrobnosti v logu).'))
         return
 
     if not content or content.lstrip()[:1] == b'<':
-        notify("Download failed - unexpected response (see debug log). Try again in a moment.")
+        notify(L('Download failed - unexpected response (see debug log). Try again in a moment.', 'Stažení selhalo - neočekávaná odpověď (podrobnosti v logu). Zkuste to za chvíli znovu.'))
         log("download got empty/HTML body for slug={0} code={1} (status {2})".format(
             row['slug'], row['code'], resp.status_code))
         return
 
     if len(content) > MAX_DOWNLOAD_BYTES:
-        notify("Download refused - file is larger than expected (see debug log).")
+        notify(L('Download refused - file is larger than expected (see debug log).', 'Stažení odmítnuto - soubor je větší, než by měl být (podrobnosti v logu).'))
         log("download refused: {0} bytes exceeds MAX_DOWNLOAD_BYTES {1}".format(
             len(content), MAX_DOWNLOAD_BYTES))
         return
@@ -510,7 +526,7 @@ def handle_download(params):
                 f.write(content)
         except Exception as e:
             log("failed to write zip file: {0}".format(e))
-            notify("Downloaded but couldn't save the file (see debug log).")
+            notify(L("Downloaded but couldn't save the file (see debug log).", 'Staženo, ale soubor se nepodařilo uložit (podrobnosti v logu).'))
             return
 
         extract_dir = os.path.join(TEMP_DIR, "legiekondor_{0}_{1}".format(safe_name, int(time.time())))
@@ -518,14 +534,14 @@ def handle_download(params):
             with zipfile.ZipFile(zip_path) as zf:
                 extracted_size = sum(info.file_size for info in zf.infolist())
                 if extracted_size > MAX_EXTRACTED_BYTES:
-                    notify("Download refused - archive is larger than expected when extracted (see debug log).")
+                    notify(L('Download refused - archive is larger than expected when extracted (see debug log).', 'Stažení odmítnuto - archiv by byl po rozbalení příliš velký (podrobnosti v logu).'))
                     log("refusing to extract {0}: extracted size {1} exceeds MAX_EXTRACTED_BYTES {2}".format(
                         zip_path, extracted_size, MAX_EXTRACTED_BYTES))
                     return
                 zf.extractall(extract_dir)
         except Exception as e:
             log("zip extract failed: {0}".format(e))
-            notify("Downloaded a zip but couldn't extract it (see debug log).")
+            notify(L("Downloaded a zip but couldn't extract it (see debug log).", 'ZIP se stáhl, ale nepodařilo se ho rozbalit (podrobnosti v logu).'))
             return
 
         sub_file = None
@@ -537,7 +553,7 @@ def handle_download(params):
             if sub_file:
                 break
         if not sub_file:
-            notify("Downloaded and extracted, but no .srt/.ass file found inside.")
+            notify(L('Downloaded and extracted, but no .srt/.ass file found inside.', 'Staženo a rozbaleno, ale uvnitř není žádný soubor .srt/.ass.'))
             log("no subtitle file found after extracting {0}".format(zip_path))
             return
         filepath = sub_file
@@ -550,7 +566,7 @@ def handle_download(params):
                 f.write(content)
         except Exception as e:
             log("failed to write subtitle file: {0}".format(e))
-            notify("Downloaded but couldn't save the file (see debug log).")
+            notify(L("Downloaded but couldn't save the file (see debug log).", 'Staženo, ale soubor se nepodařilo uložit (podrobnosti v logu).'))
             return
 
     remember_owner(filepath)
