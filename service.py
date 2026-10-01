@@ -68,6 +68,7 @@ TEMP_DIR = xbmcvfs.translatePath(os.path.join(PROFILE, 'temp', ''))
 if not xbmcvfs.exists(TEMP_DIR):
     xbmcvfs.mkdirs(TEMP_DIR)
 ROWS_FILE = os.path.join(TEMP_DIR, 'legiekondor_rows.json')
+OWNERS_FILE = os.path.join(TEMP_DIR, 'legiekondor_owners.json')
 CATALOG_FILE = os.path.join(TEMP_DIR, 'legiekondor_catalog.json')
 CATALOG_TTL = 24 * 60 * 60  # 24h - small hand-curated catalog, changes rarely
 
@@ -126,16 +127,68 @@ def load_json(path):
         return None
 
 
+def current_video():
+    """Path of the video Kodi has loaded - playing OR paused - else None.
+    (Player.Playing alone isn't enough: it's false while paused.)"""
+    try:
+        if xbmc.getCondVisibility('Player.HasVideo') or xbmc.getCondVisibility('Player.Paused'):
+            return xbmc.getInfoLabel('Player.Filenameandpath') or None
+    except Exception:
+        pass
+    return None
+
+
+def _read_owners():
+    try:
+        with open(OWNERS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_owners(owners):
+    try:
+        with open(OWNERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(owners, f)
+    except Exception as e:
+        log("couldn't save {0}: {1}".format(OWNERS_FILE, e))
+
+
+def remember_owner(path):
+    """Record which video a delivered subtitle belongs to, so
+    cleanup_temp_dir() never deletes it while that video is still loaded
+    (e.g. paused for more than an hour) - suggested by Hanabi's API
+    maintainer."""
+    video = current_video()
+    if not video:
+        return
+    try:
+        top = os.path.relpath(path, TEMP_DIR).split(os.sep)[0]
+    except ValueError:
+        return
+    if not top or top.startswith('..'):
+        return
+    owners = _read_owners()
+    owners[top] = video
+    _write_owners(owners)
+
+
 def cleanup_temp_dir():
-    """Sweep old downloaded zips/extracted folders out of TEMP_DIR - these
-    accumulated forever before. The rows and catalog caches are kept (the
-    catalog in particular has its own 24h TTL logic and would otherwise
-    get wiped every hour, defeating its purpose)."""
-    keep = {os.path.basename(ROWS_FILE), os.path.basename(CATALOG_FILE)}
+    """Sweep old downloads out of TEMP_DIR (they used to accumulate
+    forever). Kept: the small caches managed by their own logic, and every
+    subtitle belonging to the video Kodi currently has loaded - playing or
+    paused - however old it is, so a long pause can't delete a subtitle
+    that's still in use."""
+    keep = {os.path.basename(ROWS_FILE), os.path.basename(CATALOG_FILE), os.path.basename(OWNERS_FILE)}
+    owners = _read_owners()
+    video = current_video()
     try:
         now = time.time()
         for name in os.listdir(TEMP_DIR):
             if name in keep or not name.startswith('legiekondor_'):
+                continue
+            if video and owners.get(name) == video:
                 continue
             path = os.path.join(TEMP_DIR, name)
             try:
@@ -151,6 +204,10 @@ def cleanup_temp_dir():
                     os.remove(path)
             except OSError as e:
                 log("cleanup: couldn't remove {0}: {1}".format(path, e))
+        existing = set(os.listdir(TEMP_DIR))
+        still_there = dict((k, v) for k, v in owners.items() if k in existing)
+        if still_there != owners:
+            _write_owners(still_there)
     except Exception as e:
         log("cleanup_temp_dir failed: {0}".format(e))
 
@@ -503,6 +560,8 @@ def handle_download(params):
             log("failed to write subtitle file: {0}".format(e))
             notify("Downloaded but couldn't save the file (see debug log).")
             return
+
+    remember_owner(filepath)
 
     log("saved subtitle to {0}".format(filepath))
     listitem = xbmcgui.ListItem(label=os.path.basename(filepath))
